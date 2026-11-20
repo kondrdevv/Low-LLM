@@ -42,31 +42,9 @@ Re-running `train.py` overwrites the checkpoint.
 
 ## What it can and can't do
 
-It does some things correctly:
+It does some things correctly
 
-```
-You: How many sides does a square have?
-AI:  [4]
-
-You: What is the capital of France?
-AI:  Paris
-
-You: Say this backwards: "i love tea".
-AI:  "tea love i".
-```
-
-...and it fails at others, honestly:
-
-```
-You: How much is 7 + 8?
-AI:  [7]
-
-You: What is 1234 * 5678?
-AI:  [5]
-
-You: What is the capital of Mars?
-AI:  Korengagord
-```
+...and it fails at others, honestly
 
 - **It can't do real math.** Small sums get mangled — arithmetic doesn't fit in a model this size.
 - **It only works on its own material.** Words it never saw turn into plausible-looking nonsense.
