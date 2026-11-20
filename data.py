@@ -141,45 +141,80 @@ SHIFT = [("а", "б"), ("к", "л"), ("я", "б"), ("ж", "з"), ("щ", "ъ"), (
          ("б", "в"), ("м", "н"), ("т", "у"), ("ф", "х"), ("ь", "ы"), ("э", "ю")]
 
 
+UNIT_NAMES = ["единиц", "десятков", "сотен", "тысяч"]
+
+
 def _sum_steps(a, b):
-    sa, sb = str(a)[::-1], str(b)[::-1]
-    sa += "0" * (max(len(sa), len(sb)) - len(sa))
-    sb += "0" * (max(len(sa), len(sb)) - len(sb))
+    total = a + b
+    width = max(len(str(a)), len(str(b)))
+    da = [int(c) for c in str(a).zfill(width)]
+    db = [int(c) for c in str(b).zfill(width)]
     carry = 0
     parts = []
-    for i in range(len(sa)):
-        x, y = int(sa[i]), int(sb[i])
+    for pos in range(width - 1, -1, -1):
+        i = width - 1 - pos
+        x, y = da[pos], db[pos]
         s = x + y + carry
         digit, new_carry = s % 10, s // 10
-        unit = ["единиц", "десятков", "сотен", "тысяч"][i] if i < 4 else f"разряда {i}"
+        unit = UNIT_NAMES[i] if i < len(UNIT_NAMES) else f"разряда {i}"
         if carry:
-            msg = f"{unit} {x}+{y}+{carry}={s}, пишем {digit}, перенос {new_carry}"
+            msg = f"{unit} {x}+{y}+{carry}={s}, пишем {digit}"
         else:
-            msg = f"{unit} {x}+{y}={s}, пишем {digit}, перенос {new_carry}"
-        msg = msg.rstrip()
-        msg = msg.replace(", перенос 0", "")
+            msg = f"{unit} {x}+{y}={s}, пишем {digit}"
+        if new_carry:
+            msg += f", перенос {new_carry}"
         parts.append((i + 1, msg))
         carry = new_carry
-    total = a + b
-    if carry:
-        parts.append((len(sa) + 1, f"осталась {carry} в старшем разряде"))
     return total, parts
 
 
 SUM_TEMPLATES = [
     "Сложи {a} и {b}.", "Сколько будет {a}+{b}?", "{a}+{b}=?", "Найди сумму {a} и {b}.",
     "Вычисли {a}+{b} по разрядам.", "Сосчитай столбиком: {a}+{b}.",
+    "Сложи {a} и {b}", "Сколько будет {a}+{b}", "Плюс: {a}+{b}", "Сумма {a} и {b}?",
+    "сколько будет {a}+{b}?", "сложи {a} и {b}.", "Сложи {a} и {b}",
 ]
 
+CHITCHAT = [
+    ("привет", "Привет!"), ("Привет", "Привет!"), ("привет!", "Привет!"),
+    ("здравствуй", "Привет! Чем помочь?"), ("хай", "Привет!"),
+    ("как дела?", "Хорошо, спасибо. А у тебя?"), ("как дела", "Хорошо, спасибо. А у тебя?"),
+    ("как ты?", "Нормально, работаю офлайн."), ("как тебя зовут?", "Я Low-LLM."),
+    ("кто ты?", "Я маленькая языковая модель."), ("что ты умеешь?", "Считаю, знаю столицы, категории слов и буквы."),
+    ("спасибо", "Пожалуйста."), ("спасибо!", "Пожалуйста."), ("пока", "Пока!"),
+    ("до свидания", "До встречи!"), ("ты бот?", "Да, я бот."),
+    ("ты умный?", "Я очень маленький, но стараюсь."), ("ты тупой?", "Я маленький, но стараюсь."),
+]
 
-def make_arith(rng, three_digit=False, held=False):
-    if three_digit or rng.random() < 0.35:
-        a, b = rng.randint(100, 999), rng.randint(100, 999)
-    else:
-        a, b = rng.randint(10, 99), rng.randint(10, 99)
+REFUSAL_TEMPLATES = [
+    "Не понял вопрос.", "Извини, я не понял.", "Не могу ответить на это.",
+    "Я не знаю, что ответить.", "Вопрос мне не знаком.",
+]
+
+GIBBERISH = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
+
+
+def make_refusal(rng):
+    n = rng.randint(4, 14)
+    s = "".join(rng.choice(GIBBERISH + " фывапролджэячсмитьбю 123") for _ in range(n))
+    if rng.random() < 0.5:
+        s = s.upper()
+    return s, rng.choice(REFUSAL_TEMPLATES)
+
+
+def make_arith(rng, held=False):
+    r = rng.random()
     if held:
-        a = rng.randint(1000, 9999)
-        b = rng.randint(1, 99)
+        a, b = rng.randint(1000, 9999), rng.randint(1, 999)
+    elif r < 0.15:
+        a, b = rng.randint(1, 9), rng.randint(1, 9)
+    elif r < 0.45:
+        a, b = rng.randint(1, 99), rng.randint(1, 99)
+    elif r < 0.75:
+        a = rng.randint(10, 99)
+        b = rng.randint(max(1, 100 - a), 99)
+    else:
+        a, b = rng.randint(1, 999), rng.randint(1, 999)
     total, steps = _sum_steps(a, b)
     q = rng.choice(SUM_TEMPLATES).format(a=a, b=b)
     body = " ".join(f"Шаг {n}: {t}." for n, t in steps)
@@ -191,11 +226,15 @@ def make_examples(rng, n, held=False):
     out = []
     for _ in range(n):
         kind = rng.choices(
-            ["arith", "calc", "cap", "misc", "pair", "extra", "revmi", "revch", "shift", "count", "upper"],
-            weights=[26, 12, 14, 8, 10, 4, 6, 4, 2, 6, 8],
+            ["arith", "calc", "cap", "misc", "pair", "extra", "revmi", "revch", "shift", "count", "upper", "chat", "refuse"],
+            weights=[24, 10, 13, 7, 9, 3, 5, 4, 2, 5, 7, 6, 5],
         )[0]
         if kind == "arith":
             out.append(make_arith(rng, held=held))
+        elif kind == "chat":
+            out.append(rng.choice(CHITCHAT))
+        elif kind == "refuse":
+            out.append(make_refusal(rng))
         elif kind == "calc":
             e, a = rng.choice(BANK)
             out.append((rng.choice(CALC_TEMPLATES).format(e=e), str(a)))
@@ -219,21 +258,35 @@ def make_examples(rng, n, held=False):
             ])
             out.append((tpl.format(x=x), f"«{y}»."))
         elif kind == "revch":
-            x, y = rng.choice(REVERSE_CHARS)
+            if rng.random() < 0.5:
+                x = rng.choice(REVERSE_CHARS)[0]
+            else:
+                x = "".join(rng.choice(LETTERS) for _ in range(rng.randint(3, 7)))
+            y = x[::-1]
             out.append((rng.choice([f"Напиши слово {x} в обратном порядке.",
                                     f"Прочитай слово {x} справа налево.",
-                                    f"Как будет {x} наоборот?"]), y))
+                                    f"Как будет {x} наоборот?",
+                                    f"Напиши слово {x} в обратном порядке"]), y))
         elif kind == "shift":
             x, y = rng.choice(SHIFT)
             out.append((f"Какая буква идёт после буквы {x}?", y))
         elif kind == "count":
-            s = "".join(rng.choice(LETTERS) for _ in range(rng.randint(3, 9)))
+            if rng.random() < 0.5:
+                s = "".join(rng.choice(LETTERS) for _ in range(rng.randint(3, 9)))
+            else:
+                s = rng.choice([w for w, _ in PAIRS] + [c for c, _ in CAPITALS]).lower()
             out.append((rng.choice([f"Сколько букв в слове {s}?",
-                                    f"Посчитай буквы: {s}."]), str(len(s))))
+                                    f"Сколько букв в слове {s}",
+                                    f"Посчитай буквы: {s}.",
+                                    f"Сколько букв в слове {s}?"]), str(len(s))))
         else:
-            s = "".join(rng.choice(LETTERS) for _ in range(rng.randint(3, 9)))
+            if rng.random() < 0.5:
+                s = "".join(rng.choice(LETTERS) for _ in range(rng.randint(3, 9)))
+            else:
+                s = rng.choice([w for w, _ in PAIRS]).lower()
             out.append((rng.choice([f"Напиши заглавными буквами: {s}.",
-                                    f"Переведи в верхний регистр: {s}."]), s.upper()))
+                                    f"Переведи в верхний регистр: {s}.",
+                                    f"Напиши заглавными буквами: {s}"]), s.upper()))
     return out
 
 

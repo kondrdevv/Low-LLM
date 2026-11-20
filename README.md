@@ -45,17 +45,32 @@ Re-running `train.py` overwrites the checkpoint.
 It does some things correctly:
 
 ```
-You: Сложи 12 и 39.
-AI : Шаг 1: единиц 2+9=11, пишем 1, перенос 1. Шаг 2: десятков 1+3+1=5, пишем 5. Ответ: 51
+You: привет
+AI : Привет!
 
-You: Какая столица Франции?
-AI : Париж
+You: кто ты?
+AI : Я маленькая языковая модель.
+
+You: как дела?
+AI : Хорошо, спасибо. А у тебя?
+
+You: ывпзолр
+AI : Не понял вопрос.
+
+You: Сложи 2 и 2.
+AI : Шаг 1: единиц 2+2=4, пишем 4. Ответ: 4
+
+You: Какая столица Японии?
+AI : Токио
 
 You: Что такое собака?
-AI : Коротко: животное.
+AI : Слово «собака» — это животное.
 
 You: Сколько букв в слове солнце?
 AI : 6
+
+You: Напиши слово луна в обратном порядке.
+AI : анул
 
 You: Скажи наоборот: «я люблю чай».
 AI : «чай люблю я».
@@ -64,22 +79,30 @@ AI : «чай люблю я».
 ...and it fails at others, honestly:
 
 ```
-You: Сложи 232 и 101.
-AI : Шаг 1: []=[]=[]], еписеем пнис []. Шаг 2: десяткоов окв 1+1+1=3, пишеетпешеет: 1]
+You: сложи 12 и 25
+AI : ... Шаг 2: десятков 1+2=4, пишем 4. Ответ: 47      (должно быть 37)
 
-You: Напиши слово луна в обратном порядке.
-AI : еток
+You: Сложи 12 и 39.
+AI : ... Шаг 2: десятков 1+3+1=5, пишем 5. Ответ: 5     (обрывает цифры)
+
+You: Сложи 232 и 101.
+AI : Шаг 1: единиц 2+1=3, пишем 3. Шаг 2: десятков 3+]=3, пишем 3. Шаг 3: сотен
+     3+1=4, ...
 
 You: Напиши заглавными буквами: привет.
 AI : РПРЕИТ
 ```
 
-- **Arithmetic is hit or miss.** Two-digit sums with a carry sometimes go all the way
-  to the right answer; three-digit numbers collapse into noise.
+- **Arithmetic is hit or miss.** Single-digit and no-carry sums are right; a carry
+  still corrupts the next step, and three-digit numbers fall apart.
+- **It refuses on nonsense.** Random letter soup gets `Не понял вопрос.` instead of an
+  invented answer - most of the time.
+- **It can small-talk** a handful of phrases: greetings, `кто ты?`, `спасибо`.
 - **It only works on its own material.** Words it never saw turn into plausible-looking nonsense.
 - **It doesn't understand language.** It learned patterns and a handful of facts; reasoning and
   open-ended dialogue are way beyond it.
-- **Character-level tasks break.** Letters get swapped, skipped or borrowed from a neighbour.
+- **Character-level tasks are still shaky.** Reversal and letter counting work; uppercase
+  conversion still scrambles letters.
 
 So no, it is not an assistant. It's a sandbox for understanding how transformers learn
 and where small models break.
