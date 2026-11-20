@@ -4,19 +4,21 @@ import torch
 
 from model import MiniLLM, greedy_answer
 
-ck = torch.load("checkpoint.pt", weights_only=False)
+ck_path = sys.argv[1] if len(sys.argv) > 1 else "checkpoint.pt"
+ck = torch.load(ck_path, weights_only=False)
 model = MiniLLM(**ck["config"])
 model.load_state_dict(ck["state_dict"])
 model.eval()
 
-print(f"параметров: {model.count_params():,}")
-print("Введи вопрос (пустая строка — выход).\n")
+print(f"checkpoint: {ck_path} | params: {model.count_params():,}")
+print()
 
 while True:
     try:
-        q = input("Ты: ").strip()
+        q = input("You: ").strip()
     except (EOFError, KeyboardInterrupt):
         break
     if not q:
         break
-    print("ИИ:", greedy_answer(model, q), "\n")
+    print("AI :", greedy_answer(model, q))
+    print()

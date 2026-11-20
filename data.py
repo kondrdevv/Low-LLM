@@ -13,7 +13,6 @@ NUM_END = 265
 VOCAB = 276
 
 NUM_RE = re.compile(r"\b\d+\b")
-NB = 201
 
 
 def encode(text):
@@ -41,7 +40,7 @@ def _num_like(text):
 
 def encode_answer(text):
     ids = [ANS] + _num_like(text) + [EOS]
-    return ids[:128]
+    return ids[:160]
 
 
 BANK = [
@@ -87,7 +86,8 @@ PAIRS = [
     ("дуб", "дерево"), ("яблоко", "фрукт"), ("морковь", "овощ"),
     ("молоко", "напиток"), ("волк", "хищник"), ("заяц", "травоядное"),
     ("квадрат", "фигура"), ("осень", "время года"), ("физика", "наука"),
-    ("Москва", "город"), ("карп", "рыба"), ("орёл", "птица"),
+    ("Москва", "город"), ("карп", "рыба"), ("орёл", "птица"), ("ёж", "животное"),
+    ("берёза", "дерево"), ("помидор", "овощ"), ("слива", "фрукт"), ("лилия", "цветок"),
 ]
 
 QA_EXTRA = [
@@ -98,28 +98,28 @@ QA_EXTRA = [
 ]
 
 LETTERS = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
-EN_RU = ("abcdefghijklmnopqrstuvwxyz", LETTERS)
 
 CALC_TEMPLATES = [
     "Сколько будет {e}?", "Вычисли {e}.", "Посчитай: {e}", "Сколько равно {e}?",
-    "Реши пример {e}.", "Сколько получится, если {e}?", "{e} = ?",
+    "Реши пример {e}.", "Сколько получится, если {e}?", "{e} = ?", "Сосчитай {e}.",
+    "Каков результат {e}?", "Проверь: {e} =",
 ]
 
 CAP_TEMPLATES = [
     "Какая столица {c}?", "Столица {c} — это?", "Назови столицу {c}.",
-    "Какой город является столицей {c}?", "Столица страны {c}?",
+    "Какой город является столицей {c}?", "Столица страны {c}?", "Каков главный город {c}?",
 ]
 
-MISC_TEMPLATES = ["{q}", "Ответь: {q}", "Вопрос: {q}", "{q} Скажи число."]
+MISC_TEMPLATES = ["{q}", "Ответь: {q}", "Вопрос: {q}"]
 
 PAIR_TEMPLATES = [
-    "Что такое {w}?", "К какой группе относится {w}?", "Объясни: {w}.",
-    "{w} — это что?", "Назови группу для слова {w}.",
+    "Что такое {w}?", "{w} — это что?", "К какой группе относится {w}?",
+    "Объясни: {w}.", "Назови группу для слова {w}.", "Определи: {w}.",
 ]
 
 PAIR_ANSWER = [
     "{w} — это {p}.", "Это {p}.", "{w} относится к группе «{p}».",
-    "Коротко: {p}.", "{p}.",
+    "Коротко: {p}.", "{p}.", "Слово «{w}» — это {p}.",
 ]
 
 REVERSE_MI = [
@@ -128,139 +128,133 @@ REVERSE_MI = [
     ("стол стоит тут", "тут стоит стол"), ("книга лежит рядом", "рядом лежит книга"),
     ("утро очень доброе", "доброе очень утро"), ("небо светит ярко", "ярко светит небо"),
     ("друг звонит часто", "часто звонит друг"), ("дождь идёт снова", "снова идёт дождь"),
+    ("я пью воду", "воду пью я"), ("птица летит выше", "выше летит птица"),
 ]
 
 REVERSE_CHARS = [
-    ("азбука", "акубза"), ("луна", "анул"), ("палиндром", "морднилап"),
-    ("кот", "ток"), ("дом", "мод"), ("рука", "акур"), ("город", "дорог"),
-    ("слово", "оволс"), ("день", "ьнед"), ("весна", "ансев"),
+    ("азбука", "акубза"), ("луна", "анул"), ("кот", "ток"), ("дом", "мод"),
+    ("рука", "акур"), ("город", "дорог"), ("слово", "оволс"), ("день", "ьнед"),
+    ("весна", "ансев"), ("радуга", "агудар"), ("кофе", "ефок"), ("море", "ером"),
 ]
 
-SHIFT = [("а", "б"), ("к", "л"), ("я", "б"), ("ж", "з"), ("щ", "ъ"), ("ю", "я")]
+SHIFT = [("а", "б"), ("к", "л"), ("я", "б"), ("ж", "з"), ("щ", "ъ"), ("ю", "я"),
+         ("б", "в"), ("м", "н"), ("т", "у"), ("ф", "х"), ("ь", "ы"), ("э", "ю")]
 
 
-def truth(v):
-    return str(v)
+def _sum_steps(a, b):
+    sa, sb = str(a)[::-1], str(b)[::-1]
+    sa += "0" * (max(len(sa), len(sb)) - len(sa))
+    sb += "0" * (max(len(sa), len(sb)) - len(sb))
+    carry = 0
+    parts = []
+    for i in range(len(sa)):
+        x, y = int(sa[i]), int(sb[i])
+        s = x + y + carry
+        digit, new_carry = s % 10, s // 10
+        unit = ["единиц", "десятков", "сотен", "тысяч"][i] if i < 4 else f"разряда {i}"
+        if carry:
+            msg = f"{unit} {x}+{y}+{carry}={s}, пишем {digit}, перенос {new_carry}"
+        else:
+            msg = f"{unit} {x}+{y}={s}, пишем {digit}, перенос {new_carry}"
+        msg = msg.rstrip()
+        msg = msg.replace(", перенос 0", "")
+        parts.append((i + 1, msg))
+        carry = new_carry
+    total = a + b
+    if carry:
+        parts.append((len(sa) + 1, f"осталась {carry} в старшем разряде"))
+    return total, parts
 
 
-SMALL_OPS = {"+": lambda a, b: a + b, "-": lambda a, b: a - b, "*": lambda a, b: a * b}
+SUM_TEMPLATES = [
+    "Сложи {a} и {b}.", "Сколько будет {a}+{b}?", "{a}+{b}=?", "Найди сумму {a} и {b}.",
+    "Вычисли {a}+{b} по разрядам.", "Сосчитай столбиком: {a}+{b}.",
+]
 
 
-def make_examples(rng, n, holdout=False, unseen_words=False):
+def make_arith(rng, three_digit=False, held=False):
+    if three_digit or rng.random() < 0.35:
+        a, b = rng.randint(100, 999), rng.randint(100, 999)
+    else:
+        a, b = rng.randint(10, 99), rng.randint(10, 99)
+    if held:
+        a = rng.randint(1000, 9999)
+        b = rng.randint(1, 99)
+    total, steps = _sum_steps(a, b)
+    q = rng.choice(SUM_TEMPLATES).format(a=a, b=b)
+    body = " ".join(f"Шаг {n}: {t}." for n, t in steps)
+    ans = f"{body} Ответ: {total}"
+    return q, ans
+
+
+def make_examples(rng, n, held=False):
     out = []
     for _ in range(n):
         kind = rng.choices(
-            ["calc", "arith", "tens_sum", "cap", "misc", "pair", "extra", "revmi", "revch", "shift", "count"],
-            weights=[16, 14, 8, 18, 10, 12, 6, 8, 5, 3, 8],
+            ["arith", "calc", "cap", "misc", "pair", "extra", "revmi", "revch", "shift", "count", "upper"],
+            weights=[26, 12, 14, 8, 10, 4, 6, 4, 2, 6, 8],
         )[0]
-        if kind == "tens_sum":
-            a, b = rng.randint(1, 9) * 10, rng.randint(1, 9)
-            e = f"{a}+{b}"
-            out.append((rng.choice(CALC_TEMPLATES).format(e=e), truth(a + b)))
+        if kind == "arith":
+            out.append(make_arith(rng, held=held))
         elif kind == "calc":
             e, a = rng.choice(BANK)
-            q = rng.choice(CALC_TEMPLATES).format(e=e)
-            out.append((q, truth(a)))
-        elif kind == "arith":
-            while True:
-                a, b = rng.randint(1, 20), rng.randint(1, 20)
-                op = rng.choice("+-*")
-                if op != "-" or a >= b:
-                    break
-            if rng.random() < 0.5:
-                a, b = b, a
-            res = SMALL_OPS[op](a, b)
-            e = f"{a}{op}{b}"
-            q = rng.choice(CALC_TEMPLATES).format(e=e)
-            out.append((q, truth(res)))
-        elif kind == "count":
-            s = "".join(rng.choice(LETTERS) for _ in range(rng.randint(3, 9)))
-            out.append((f"Сколько букв в слове {s}?", str(len(s))))
+            out.append((rng.choice(CALC_TEMPLATES).format(e=e), str(a)))
         elif kind == "cap":
             c, a = rng.choice(CAPITALS)
-            q = rng.choice(CAP_TEMPLATES).format(c=c)
-            out.append((q, a))
+            out.append((rng.choice(CAP_TEMPLATES).format(c=c), a))
         elif kind == "misc":
             q, a = rng.choice(QUIZ_MISC)
-            q = rng.choice(MISC_TEMPLATES).format(q=q.rstrip("?"))
-            out.append((q if q.endswith("?") else q + "?", a))
+            out.append((rng.choice(MISC_TEMPLATES).format(q=q), a))
         elif kind == "pair":
             w, p = rng.choice(PAIRS)
-            q = rng.choice(PAIR_TEMPLATES).format(w=w)
-            a = rng.choice(PAIR_ANSWER).format(w=w, p=p)
-            out.append((q, a))
+            out.append((rng.choice(PAIR_TEMPLATES).format(w=w),
+                        rng.choice(PAIR_ANSWER).format(w=w, p=p)))
         elif kind == "extra":
-            q, a = rng.choice(QA_EXTRA)
-            out.append((q, a))
+            out.append(rng.choice(QA_EXTRA))
         elif kind == "revmi":
             x, y = rng.choice(REVERSE_MI)
-            q = f"Скажи наоборот: «{x}»."
-            if rng.random() < 0.5:
-                q = f"Переставь слова в обратном порядке: {x}."
-            out.append((q, f"«{y}»."))
+            tpl = rng.choice([
+                "Скажи наоборот: «{x}».", "Переставь слова в обратном порядке: {x}.",
+                "Скажи наоборот: {x}.", "«{x}» наоборот?", "Читай справа налево: {x}.",
+            ])
+            out.append((tpl.format(x=x), f"«{y}»."))
         elif kind == "revch":
             x, y = rng.choice(REVERSE_CHARS)
-            q = f"Напиши слово {x} в обратном порядке."
-            out.append((q, y))
-        else:
+            out.append((rng.choice([f"Напиши слово {x} в обратном порядке.",
+                                    f"Прочитай слово {x} справа налево.",
+                                    f"Как будет {x} наоборот?"]), y))
+        elif kind == "shift":
             x, y = rng.choice(SHIFT)
-            q = f"Какая буква идёт после буквы {x}?"
-            out.append((q, y))
-    return out
-
-
-def make_upper(rng, n):
-    out = []
-    for _ in range(n):
-        s = "".join(rng.choice(LETTERS) for _ in range(rng.randint(3, 9)))
-        out.append((f"Напиши заглавными буквами: {s}.", s.upper()))
+            out.append((f"Какая буква идёт после буквы {x}?", y))
+        elif kind == "count":
+            s = "".join(rng.choice(LETTERS) for _ in range(rng.randint(3, 9)))
+            out.append((rng.choice([f"Сколько букв в слове {s}?",
+                                    f"Посчитай буквы: {s}."]), str(len(s))))
+        else:
+            s = "".join(rng.choice(LETTERS) for _ in range(rng.randint(3, 9)))
+            out.append((rng.choice([f"Напиши заглавными буквами: {s}.",
+                                    f"Переведи в верхний регистр: {s}."]), s.upper()))
     return out
 
 
 OUTSIDE_WORDS = [
-    ("груша", "фрукт"), ("сосна", "дерево"), ("берёза", "дерево"), ("тигр", "хищник"),
-    ("лиса", "хищник"), ("капуста", "овощ"), ("сок", "напиток"), ("тюльпан", "цветок"),
-    ("круг", "фигура"), ("лето", "время года"), ("химия", "наука"), ("мёд", "продукт"),
-    ("поезд", "транспорт"), ("щетка", "предмет"), ("апельсин", "фрукт"), ("окунь", "рыба"),
-    ("воробей", "птица"), ("Казань", "город"), ("слива", "фрукт"), ("ёлка", "дерево"),
+    ("груша", "фрукт"), ("сосна", "дерево"), ("тигр", "хищник"), ("лиса", "хищник"),
+    ("капуста", "овощ"), ("сок", "напиток"), ("тюльпан", "цветок"),
+    ("круг", "фигура"), ("лето", "время года"), ("химия", "наука"),
+    ("поезд", "транспорт"), ("апельсин", "фрукт"), ("окунь", "рыба"), ("воробей", "птица"),
 ]
 
-REVERSE_CHARS_OUTSIDE = [("радуга", "агудар"), ("кофе", "ефок"), ("море", "ером"), ("свет", "тевс")]
 
-
-def make_outside(rng, n):
-    out = []
-    for _ in range(n):
-        kind = rng.choices(["pair", "revch", "arith", "capital"], weights=[45, 15, 25, 15])[0]
-        if kind == "pair":
-            w, p = rng.choice(OUTSIDE_WORDS)
-            q = rng.choice(PAIR_TEMPLATES).format(w=w)
-            a = rng.choice(PAIR_ANSWER).format(w=w, p=p)
-            out.append((q, a))
-        elif kind == "revch":
-            x, y = rng.choice(REVERSE_CHARS_OUTSIDE)
-            out.append((f"Напиши слово {x} в обратном порядке.", y))
-        elif kind == "arith":
-            a, b = rng.randint(21, 60), rng.randint(21, 60)
-            q = rng.choice(CALC_TEMPLATES).format(e=f"{a}+{b}")
-            out.append((q, str(a + b)))
-        else:
-            q = rng.choice(CAP_TEMPLATES).format(c="Бразилии")
-            out.append((q, "Бразилиа"))
-    return out
-
-
-def build_corpus(n_batches, seed=0):
+def build_corpus(seed=0):
     rng = random.Random(seed)
-    train = []
-    for _ in range(n_batches):
-        train += make_examples(rng, 1000)
-    train += make_upper(rng, 2400)
+    train = make_examples(rng, 9000)
+    train += make_examples(rng, 1500, held=True)
     train = list(dict.fromkeys(train))
-    ev = list(dict.fromkeys(make_examples(rng, 400)))
+    ev = list(dict.fromkeys(make_examples(random.Random(seed + 1), 400)))
     ev = [p for p in ev if p not in set(train)][:150]
-    outside = make_outside(rng, 120)
-    return train, ev, outside
+    out = [p for p in make_examples(random.Random(seed + 2), 300)
+           if p not in set(train)][:100]
+    return train, ev, out
 
 
 def encode_pair(q, a):

@@ -64,7 +64,7 @@ def build_batch(pairs, max_len=192):
 
 
 @torch.no_grad()
-def greedy_answer(model, question, max_new=48):
+def greedy_answer(model, question, max_new=200):
     model.eval()
     ids = [data.BOS, data.ISTART] + data.encode(question) + [data.IEND, data.TEXT_START]
     for _ in range(max_new):
