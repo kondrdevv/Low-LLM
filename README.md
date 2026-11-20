@@ -86,17 +86,6 @@ and where small models break.
 | `train.py` | training loop and checkpoint saving |
 | `chat.py` | interactive chat |
 | `checkpoint.pt` | trained weights |
-| `checkpoint_v1.pt` | first version (before the corpus rework) |
-
-## Roadmap
-
-The goal is to keep upgrading it:
-
-- [ ] bigger model — more layers and width
-- [ ] better tokenization (BPE instead of raw bytes)
-- [ ] reasoning-style tasks instead of pure recall
-- [ ] step-by-step arithmetic so it can actually add
-- [ ] proper evaluation: accuracy on held-out and out-of-distribution questions
 
 ## Tune it yourself
 
