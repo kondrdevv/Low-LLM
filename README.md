@@ -1,130 +1,150 @@
-# Low-LLM - a tiny language model built from scratch
+# Low-LLM
 
-A very small transformer that trains and answers **fully offline** on an ordinary CPU.
-No internet, no API, no pre-trained weights - just PyTorch and curiosity.
+A language model built from scratch. No internet, no API, no pre-trained weights -
+just PyTorch and curiosity.
 
-It is a **dumb little AI** by design: it learns from a tiny generated study book and gets
-surprisingly good at a few narrow things, then fails in funny ways on everything else.
-The point is to watch exactly where that line is - and then make it bigger.
+It is a **dumb little AI** by design: it learns from its own material, gets surprisingly
+good at a few narrow things, then fails in funny ways on everything else. The point is
+to watch exactly where that line is - and then make it bigger.
 
-## How it works
+## Versions
 
-- `data.py` - builds the "study book": question -> answer pairs (step-by-step arithmetic,
-  capitals, word categories, letter counting, word reversal).
-- `model.py` - a decoder-only transformer. It learns to predict the next byte, nothing else.
-  There are no rules, lookups or hardcoded answers anywhere in the code.
-- `train.py` - trains from scratch (AdamW + warmup + cosine schedule).
-- `chat.py` - an offline chat loop: type a question, get an answer.
+| | 0.0.1 | 0.0.3 | 0.0.4 |
+|---|---|---|---|
+| Parameters | 0.5M | 1.9M | **17M** |
+| Data | Q&A only | Q&A only | 120M chars Wikipedia + Q&A |
+| Tokenizer | bytes | bytes | BPE, 8192 |
+| Trained on | CPU | CPU | Colab T4 |
+| Spaces | - | - | yes |
+
+## 0.0.4 in short
+
+- **9x bigger model** - 6 layers x 384, ~17M parameters, BPE vocabulary of 8192.
+- **Real Russian text** - 120M characters of Wikipedia mixed with the Q&A study book.
+- **Spaces are back** - the tokenizer keeps a word-boundary marker, so answers read
+  `Это животное.` instead of `Этоэтоживотное`.
+- **`generate.py`** - top-k, temperature and repetition penalty instead of raw argmax.
+- **`chat.py` can be tuned live** - `/set temp 0.5`, `/set top_k 20`, `/greedy`, `/params`, `/reset`.
+- **Digit-wise addition** - the model writes out each place value and carries.
+
+## Weights and vocabulary
+
+**`model.pt` and `bpe.json` are not in this repository** - both are attached to the release,
+because a model only works with the exact vocabulary it was trained with.
+
+1. Open the [Releases](../../releases) page and download `model.pt` **and** `bpe.json`
+   from the same version.
+2. Put both into the project folder.
+
+Without them the code runs, but `chat.py` has nothing to load.
 
 ## Requirements
 
 - Python 3.10+
-- PyTorch (CPU build is enough)
+- PyTorch (CPU build is enough to chat)
 
 ```powershell
 pip install torch
 ```
 
-## Run it
+## Run
 
 ```powershell
-cd mini_llm
-
-# train from scratch (takes a while on CPU)
-python train.py
-
-# chat with the trained model
+# put model.pt and bpe.json next to the code, then:
 python chat.py
 ```
 
-Pre-trained weights are included in `checkpoint.pt`, so `chat.py` works right away.
-Re-running `train.py` overwrites the checkpoint.
+If the files live elsewhere, pass the folder:
+
+```powershell
+python chat.py "C:\path\to\folder-with-model.pt"
+```
+
+Inside the chat:
+
+```
+/set temp 0.5        lower the temperature
+/set top_k 20        choose from the 20 best tokens
+/set penalty 1.0     stronger repetition penalty
+/set n 200           answer length
+/greedy              switch argmax on/off
+/params              show settings
+/reset               back to defaults (/quit to exit)
+```
+
+Defaults: `temp=0.7  top_k=40  penalty=0.6  n=120`.
+
+## Generate without the chat
+
+```powershell
+python generate.py --prompt "Москва — это " --n 120
+python generate.py --greedy --prompt "Москва — это "   # old argmax behaviour
+```
+
+## Train it yourself
+
+Everything runs in Google Colab on a free T4 - see `COLAB.md` for the step-by-step.
+Roughly 20-40 minutes of preprocessing and about 1.5 hours for 30 000 steps.
+
+Locally (CPU) it works too, just many times slower.
 
 ## What it can and can't do
 
 It does some things correctly:
 
 ```
-You: привет
-AI : Привет!
+Ты: Какая столица Франции?
+ИИ: Париж
 
-You: кто ты?
-AI : Я маленькая языковая модель.
+Ты: Какая столица Японии?
+ИИ: Токио
 
-You: как дела?
-AI : Хорошо, спасибо. А у тебя?
+Ты: Что такое роза?
+ИИ: Это цветок.
 
-You: ывпзолр
-AI : Не понял вопрос.
-
-You: Сложи 2 и 2.
-AI : Шаг 1: единиц 2+2=4, пишем 4. Ответ: 4
-
-You: Какая столица Японии?
-AI : Токио
-
-You: Что такое собака?
-AI : Слово «собака» — это животное.
-
-You: Сколько букв в слове солнце?
-AI : 6
-
-You: Напиши слово луна в обратном порядке.
-AI : анул
-
-You: Скажи наоборот: «я люблю чай».
-AI : «чай люблю я».
+Ты: 123 и 342.
+ИИ: Шаг 1: единиц 3+2=5, пишем 5. Шаг 2: десятков 2+4=6, пишем 6.
+     Шаг 3: сотен 1+3=4, пишем 4. Ответ: 465
 ```
 
 ...and it fails at others, honestly:
 
 ```
-You: сложи 12 и 25
-AI : ... Шаг 2: десятков 1+2=4, пишем 4. Ответ: 47      (должно быть 37)
+Ты: Сложи 12 и 39.
+ИИ: ... Шаг 2: десятков 1+3=5, пишем 5. Ответ: 551        (перенос потерян)
 
-You: Сложи 12 и 39.
-AI : ... Шаг 2: десятков 1+3+1=5, пишем 5. Ответ: 5     (обрывает цифры)
+Ты: Что такое квантовая физика?
+ИИ: Это фрукт.                                             (выучен шаблон, не смысл)
 
-You: Сложи 232 и 101.
-AI : Шаг 1: единиц 2+1=3, пишем 3. Шаг 2: десятков 3+]=3, пишем 3. Шаг 3: сотен
-     3+1=4, ...
-
-You: Напиши заглавными буквами: привет.
-AI : РПРЕИТ
+Ты: ыапщжриогыщпилмрщшвакпро0зкауфыошпщыарвзпщшфрош
+ИИ: Привет! Чем помочь?                                    (мусор = приветствие)
 ```
 
-- **Arithmetic is hit or miss.** Single-digit and no-carry sums are right; a carry
-  still corrupts the next step, and three-digit numbers fall apart.
-- **It refuses on nonsense.** Random letter soup gets `Не понял вопрос.` instead of an
-  invented answer - most of the time.
-- **It can small-talk** a handful of phrases: greetings, `кто ты?`, `спасибо`.
-- **It only works on its own material.** Words it never saw turn into plausible-looking nonsense.
-- **It doesn't understand language.** It learned patterns and a handful of facts; reasoning and
-  open-ended dialogue are way beyond it.
-- **Character-level tasks are still shaky.** Reversal and letter counting work; uppercase
-  conversion still scrambles letters.
+- **Facts it saw are solid.** Capitals 6/6, word categories 5/6 - everything from the study book.
+- **A carry is found but not applied.** `12+39` loses the carried digit.
+- **Anything unknown gets the most common template.** No understanding, just the format.
+- **Random input is treated as a greeting.**
 
-So no, it is not an assistant. It's a sandbox for understanding how transformers learn
+This is not an assistant. It's a sandbox for understanding how transformers learn
 and where small models break.
 
 ## Files
 
 | File | What it does |
 |---|---|
-| `data.py` | generates training pairs and encodes them into tokens |
-| `model.py` | architecture, batching, generation, answer rendering |
-| `train.py` | training loop and checkpoint saving |
-| `chat.py` | interactive chat |
-| `checkpoint.pt` | final 1.9M model (release 0.0.2) |
-
-## Tune it yourself
-
-Change `STEPS`, `BATCH` and `CFG` in `train.py` - the model size is defined by
-`n_layer`, `dim`, `n_head` and `seq_len`.
+| `bpe.py` | BPE tokenizer with word-boundary markers, train/save/load/encode/decode |
+| `model.py` | the transformer itself - 6 layers x 384 |
+| `make_corpus.py` | builds the mixed corpus: Wikipedia + generated Q&A |
+| `pretrain.py` | training loop with fp16, checkpoints every 500 steps |
+| `generate.py` | sampling: top-k, temperature, repetition penalty, `--greedy` |
+| `chat.py` | interactive chat with live settings |
+| `COLAB.md` | step-by-step Colab instructions |
+| `bpe.json` | vocabulary of the trained model |
+| `model.pt` | weights - **download from Releases** |
 
 ## License
 
 MIT - see [LICENSE](LICENSE).
 
-Yes, this thing is legally protected. It still can't add 7 + 8, but at least the
+Yes, this thing is legally protected. It still can't add 12 + 39, but at least the
 lawyers are covered.
